@@ -18,6 +18,9 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    install_requires=['astropy','numpy','scipy','specutils','PyAstronomy'],
+    package_data={
+        'pyxcsao': ['getha.pt','getli.pt'],
+    },
+    install_requires=['astropy','numpy','scipy','specutils','PyAstronomy','pytorch,'torchvision'],
     python_requires='>=3.6',
 )
