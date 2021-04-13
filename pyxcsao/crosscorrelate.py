@@ -49,8 +49,8 @@ class PyXCSAO:
 			raise RuntimeError('Please specify st_lambda & end_lambda, or provide a data spectrum to automatically determine the range.')
 
 
-	def add_spectrum(self,name,i=0,laname=None,data_class='boss'):
-		flux,la,meta=data_loader(name,i=i,data_class=data_class,laname=laname)
+	def add_spectrum(self,name,i=0,laname=None,data_class='boss',meta=None):
+		flux,la,meta=data_loader(name,i=i,data_class=data_class,laname=laname,meta=meta)
 		if self.st_lambda is None:
 			self.st_lambda=np.ceil(min(la))
 			if self.end_lambda is not None:
@@ -93,6 +93,7 @@ class PyXCSAO:
 		self.grid_logg_num=len(np.unique(self.grid_logg))
 		self.grid_feh_num=len(np.unique(self.grid_feh))
 		self.grid_alpha_num=len(np.unique(self.grid_alpha))
+		self.grid_class=grid_class
 		return
 		
 	
@@ -334,7 +335,13 @@ class PyXCSAO:
 		return out
 		
 	def best_template(self):
-		st={'ra':self.meta['ra'],'dec':self.meta['dec'],'objid':self.meta['objid'],'plate':self.meta['plate'],'mjd':self.meta['mjd'],'fiber':self.meta['fiber'],'snr':self.meta['snr'],'r':self.best_r,'rv':self.best_rv[0],'erv':self.best_rv[1]}
+		st=self.meta
+		st['r']=self.best_r
+		st['rv']=self.best_rv[0]
+		st['erv']=self.best_rv[1]
+		st['grid']=self.grid_class
+		st['st_lambda']=self.st_lambda
+		st['end_lambda']=self.end_lambda
 		
 		try:
 			st['teff']=self.best_teff[0]
