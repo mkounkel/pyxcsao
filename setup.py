@@ -21,6 +21,6 @@ setuptools.setup(
     package_data={
         'pyxcsao': ['getha.pt','getli.pt'],
     },
-    install_requires=['astropy','numpy','scipy','specutils','PyAstronomy','pytorch,'torchvision'],
+    install_requires=['astropy','numpy','scipy','specutils','PyAstronomy','pytorch','torchvision'],
     python_requires='>=3.6',
 )
