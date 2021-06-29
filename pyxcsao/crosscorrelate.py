@@ -49,7 +49,7 @@ class PyXCSAO:
 			raise RuntimeError('Please specify st_lambda & end_lambda, or provide a data spectrum to automatically determine the range.')
 
 
-	def add_spectrum(self,name,i=0,laname=None,data_class='boss',meta=None):
+	def add_spectrum(self,name,i=0,laname=None,data_class='boss',meta=None,emission=False,clip=True):
 		flux,la,meta=data_loader(name,i=i,data_class=data_class,laname=laname,meta=meta)
 		if self.st_lambda is None:
 			self.st_lambda=np.ceil(min(la))
@@ -60,7 +60,7 @@ class PyXCSAO:
 			self.la,self.lag=self.set_lambda()
 	
 		
-		self.data=self.format_spectrum(flux,la)
+		self.data=self.format_spectrum(flux,la,clip=clip,emission=emission)
 		self.meta=meta
 		self.best_r=None
 		self.best_grid_index=None
@@ -126,20 +126,34 @@ class PyXCSAO:
 		pickle.dump( [np.array(temps),np.array(teffs),np.array(loggs),np.array(fehs),np.array(alphas),self.la], open(grid_pickle, "wb" ) )
 		return np.array(temps),np.array(teffs),np.array(loggs),np.array(fehs),np.array(alphas)
 		
-	def format_spectrum(self,flux,la,continuum_correct=True,rebin=True):
+	def format_spectrum(self,flux,la,clip=True,emission=False):
 	
 		mx=np.nanmax(flux)
 		if mx==0.: mx=1.	
 		spec = Spectrum1D(spectral_axis=la*u.AA, flux=np.nan_to_num(flux)/mx*u.Jy)
-		if rebin:
-			if (min(la)>self.st_lambda) | (max(la)<self.end_lambda):
-				raise RuntimeError('st_lambda {st} or end_lambda {ed} are outside of the input spectrum range of {mn} to {mx}'.format(st=str(self.st_lambda),ed=str(self.end_lambda),mn=str(min(la)),mx=str(max(la))))
-			spec=self.spline(spec,self.la)
-		if continuum_correct:
-			spec_fit = fit_continuum(spec)
-			spec_cont = spec_fit(self.la)
-			spec=spec/spec_cont
-		return spec.flux.value
+		
+		#rebin
+		if (min(la)>self.st_lambda) | (max(la)<self.end_lambda):
+			raise RuntimeError('st_lambda {st} or end_lambda {ed} are outside of the input spectrum range of {mn} to {mx}'.format(st=str(self.st_lambda),ed=str(self.end_lambda),mn=str(min(la)),mx=str(max(la))))
+		spec=self.spline(spec,self.la)
+		
+		#continuum correct
+		spec_fit = fit_continuum(spec)
+		spec_cont = spec_fit(self.la)
+		spec=spec/spec_cont
+		
+		spec=spec.flux.value
+		
+		if clip:
+			a=np.where((spec>2) | (spec<-0.5))[0]
+			spec[a]=1
+		
+		if emission:
+			w=15
+			a=np.where(((self.la.value>6562.79-w) & (self.la.value<6562.79+w)) | ((self.la.value>4861.35-w) & (self.la.value<4861.35+w)) | ((self.la.value>4340.472-w) & (self.la.value<4340.472+w)) | ((self.la.value>4101.734-w) & (self.la.value<4101.734+w)))[0]
+			spec[a]=1
+		
+		return spec
 		
 	def small_spectrum(self):
 		a=np.where((self.la>6400*u.AA) & (self.la<6800*u.AA))[0]
