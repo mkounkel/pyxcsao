@@ -28,6 +28,13 @@ class getEqW():
 		
 	def add_spectrum(self,name,i=0,laname=None,data_class='boss'):
 		flux,la,meta=data_loader(name,i=i,data_class=data_class,laname=laname)		
+		
+		cont=self.measureEQW(la,flux,7035-15,7035+15)
+		self.cah=cont/self.measureEQW(la,flux,6975-15,6975+15)
+		self.tio1=cont/self.measureEQW(la,flux,7140-15,7140+15)
+		self.tio2=self.measureEQW(la,flux,7500-15,7500+15)/self.measureEQW(la,flux,7800-15,7800+15)
+		self.nai=self.measureEQW(la,flux,8150-15,8150+15)/self.measureEQW(la,flux,8189-15,8189+15)
+		
 		self.data=torch.Tensor([[self.format_spectrum(flux,la)]])
 		self.meta=meta
 		return
@@ -60,7 +67,12 @@ class getEqW():
 		return self.ha,self.li
 		
 		
-		
+	def measureEQW(self,x1,y1,minx,maxx):
+	    x=np.linspace(minx,maxx,50)
+	    y=np.interp(x, x1, y1)
+	    eqw=-(np.trapz(y,x=x)-np.trapz(y*0+1,x=x))
+	    
+	    return eqw		
 		
 		
 class Net(nn.Module):
