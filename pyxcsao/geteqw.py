@@ -6,6 +6,7 @@ from specutils.manipulation import FluxConservingResampler, LinearInterpolatedRe
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import pkg_resources
 
 from .data import data_loader
 class getEqW():
@@ -20,8 +21,8 @@ class getEqW():
 		self.model_li=Net()
 		self.model_ha=Net()
 		
-		self.model_li.load_state_dict(torch.load('pyxcsao/getli.pt', map_location='cpu'))
-		self.model_ha.load_state_dict(torch.load('pyxcsao/getha.pt', map_location='cpu'))
+		self.model_li.load_state_dict(torch.load(pkg_resources.resource_filename('pyxcsao', 'getli.pt'), map_location='cpu'))
+		self.model_ha.load_state_dict(torch.load(pkg_resources.resource_filename('pyxcsao', 'getha.pt'), map_location='cpu'))
 		
 		self.model_li.eval()
 		self.model_ha.eval()
