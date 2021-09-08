@@ -21,6 +21,8 @@ def data_loader(data_path,i=0,data_class='boss',laname=None,meta=None):
 		return load_boss_cframe(data_path,meta,i=i)
 	elif data_class=='lamost':
 		return load_lamost(data_path)
+	elif data_class=='segue':
+		return load_segue(data_path)
 	elif data_class=='user':
 		return load_user(data_path,laname,meta)
 	else:
@@ -43,13 +45,23 @@ def load_boss(name):
 		la=10**spec['LOGLAM']
 
 	try:
-		meta={'ra'    :x['PLUG_RA'],
-	          'dec'   :x['PLUG_DEC'],
-	          'objid' :y['CATALOGID'][0],
-	          'plate' :x['PLATEID'],
-	          'mjd'   :x['MJD'],
-	          'fiber' :y['FIBERID'][0],
-	          'snr'   :y['SN_MEDIAN_ALL'][0]}
+		meta={'ra'          :x['PLUG_RA'],
+	          'dec'         :x['PLUG_DEC'],
+	          'objid'       :y['CATALOGID'][0],
+	          'plate'       :x['PLATEID'],
+	          'mjd'         :x['MJD'],
+	          'fiber'       :y['FIBERID'][0],
+	          'snr'         :y['SN_MEDIAN_ALL'][0],
+	          'firstcarton' :y['FIRSTCARTON'][0][0],
+	          'parallax'    :y['GAIA_PARALLAX'][0],
+	          'pmra'        :y['GAIA_PMRA'][0],
+	          'pmdec'       :y['GAIA_PMDEC'][0],
+	          'G'           :y['GAIA_G'][0],
+	          'BP'          :y['GAIA_BP'][0],
+	          'RP'          :y['GAIA_RP'][0],
+	          'J'           :y['TWOMASS_MAG'][0][0],
+	          'H'           :y['TWOMASS_MAG'][0][1],
+	          'K'           :y['TWOMASS_MAG'][0][2]}
 	except:
 		meta={'ra'    :x['PLUG_RA'],
 	          'dec'   :x['PLUG_DEC'],
@@ -76,6 +88,33 @@ def load_lamost(name):
 	      'mjd'   :x['MJD'],
 	      'fiber' :str(x['SPID'])+'-'+str(x['FIBERID']),
 	      'snr'   :x['SNRR']}
+
+	return flux,la,meta
+	
+def load_segue(name):
+	hdul = fits.open(name)
+	spec = hdul[0].data
+	x=hdul[0].header
+	hdul.close()
+	flux=spec[0,:]
+	la=10**(np.arange(x['NAXIS1'])*x['CD1_1']+x['CRVAL1'])
+
+	try:
+		meta={'ra'    :x['RA'],
+	      'dec'   :x['DEC'],
+	      'objid' :x['NAME'],
+	      'plate' :x['PLATEID'],
+	      'mjd'   :x['MJD'],
+	      'fiber' :0,
+	      'snr'   :x['SPEC2_R']}
+	except:
+		meta={'ra'    :x['RADEG'],
+	      'dec'   :x['DECDEG'],
+	      'objid' :x['NAME'],
+	      'plate' :x['PLATEID'],
+	      'mjd'   :x['MJD'],
+	      'fiber' :0,
+	      'snr'   :x['SPEC2_R']}
 
 	return flux,la,meta
 	
@@ -161,8 +200,4 @@ def makemeta(meta):
 		if 'fiber' not in meta: meta['fiber']=np.nan
 		if 'snr' not in meta:   meta['snr']=np.nan
 	return meta
-	
-def correct_blue_lambda(la):
-	return la+10**(-5.5888976E-4*la+3.6036503)*la/299792.458
-	
 	
