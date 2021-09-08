@@ -18,7 +18,7 @@ warnings.filterwarnings('ignore')
 
 
 class PyXCSAO:
-	def __init__(self,st_lambda=None,end_lambda=None,ncols=8192,low_bin=5,top_low=10,top_nrun=125,nrun=255,bell_window=0.05,minvel=-500,maxvel=500,from_spectrum=None,spectrum_num=0,data_class='boss'):
+	def __init__(self,st_lambda=None,end_lambda=None,ncols=8192,low_bin=0,top_low=20,top_nrun=125,nrun=255,bell_window=0.05,minvel=-500,maxvel=500,from_spectrum=None,spectrum_num=0,data_class='boss'):
 		
 		self.ncols=ncols
 		self.bell_window=bell_window
@@ -76,7 +76,7 @@ class PyXCSAO:
 	def add_grid(self,grid_pickle=None,grid_path=None,grid_class=None,laname=None,silent=False):
 		if grid_path is None and grid_pickle is not None:
 			try:
-				self.grid,self.grid_teff,self.grid_logg,self.grid_feh,self.grid_alpha,grid_la=pickle.load( open( grid_pickle, "rb" ) )
+				self.grid,self.grid_teff,self.grid_logg,self.grid_feh,self.grid_alpha,grid_la,self.grid_class=pickle.load( open( grid_pickle, "rb" ) )
 			except ValueError:
 				print("Cannot load this grid, recompute and make sure it has been properly formated.")
 			if (np.abs(grid_la[0].value-self.st_lambda)>0.1) | (np.abs(grid_la[-1].value-self.end_lambda)>0.1) | (len(grid_la)!=self.ncols):
@@ -86,14 +86,21 @@ class PyXCSAO:
 		else:
 			if grid_class is None:
 				raise RuntimeError('Please provide the grid type or an appropriate data loader')
-			self.grid,self.grid_teff,self.grid_logg,self.grid_feh,self.grid_alpha=self.add_new_grid(grid_pickle,grid_path,grid_class,laname=laname,silent=silent)
+			self.grid,self.grid_teff,self.grid_logg,self.grid_feh,self.grid_alpha,self.grid_class=self.add_new_grid(grid_pickle,grid_path,grid_class,laname=laname,silent=silent)
 			
 			
 		self.grid_teff_num=len(np.unique(self.grid_teff))
+		self.grid_teff_min=np.min(self.grid_teff)
+		self.grid_teff_max=np.max(self.grid_teff)
 		self.grid_logg_num=len(np.unique(self.grid_logg))
+		self.grid_logg_min=np.min(self.grid_logg)
+		self.grid_logg_max=np.max(self.grid_logg)
 		self.grid_feh_num=len(np.unique(self.grid_feh))
+		self.grid_feh_min=np.min(self.grid_feh)
+		self.grid_feh_max=np.max(self.grid_feh)
 		self.grid_alpha_num=len(np.unique(self.grid_alpha))
-		self.grid_class=grid_class
+		self.grid_alpha_min=np.min(self.grid_alpha)
+		self.grid_alpha_max=np.max(self.grid_alpha)
 		return
 		
 	
@@ -123,8 +130,8 @@ class PyXCSAO:
 			#except:
 			#	pass
 		
-		pickle.dump( [np.array(temps),np.array(teffs),np.array(loggs),np.array(fehs),np.array(alphas),self.la], open(grid_pickle, "wb" ) )
-		return np.array(temps),np.array(teffs),np.array(loggs),np.array(fehs),np.array(alphas)
+		pickle.dump( [np.array(temps),np.array(teffs),np.array(loggs),np.array(fehs),np.array(alphas),self.la,grid_class], open(grid_pickle, "wb" ) )
+		return np.array(temps),np.array(teffs),np.array(loggs),np.array(fehs),np.array(alphas),grid_class
 		
 	def format_spectrum(self,flux,la,clip=True,emission=False):
 	
@@ -210,24 +217,56 @@ class PyXCSAO:
 		mirror=np.flip(x[peak_loc:endpoint])
 		sigmaA=np.sqrt(1./2/len(mirror)*np.sum((x[startpoint:peak_loc]-mirror)**2))
 		return x[peak_loc]/sigmaA/np.sqrt(2)
+		
+	def run_XCSAO_optimized(self,run_subgrid=True,m=1.5,resample_teff=None,resample_logg=None,resample_feh=None,resample_alpha=None):
+		
+		self.run_XCSAO(run_subgrid=False,loggrange=[4.5,4.5],fehrange=[0,0],alpharange=[0,0])
+		goodteff=self.get_par(self.best_teff_sparse)
+		teffrange=[goodteff[0]-goodteff[1]*m,goodteff[0]+goodteff[1]*m]
+		
+		self.run_XCSAO(run_subgrid=False,teffrange=teffrange,fehrange=[0,0],alpharange=[0,0],new=False)
+		goodlogg=self.get_par(self.best_logg_sparse)
+		loggrange=[goodlogg[0]-goodlogg[1]*m,goodlogg[0]+goodlogg[1]*m]
+		
+		
+		self.run_XCSAO(run_subgrid=False,teffrange=teffrange,loggrange=loggrange,alpharange=[0,0],new=False)
+		goodfeh=self.get_par(self.best_feh_sparse)
+		fehrange=[goodfeh[0]-goodfeh[1]*m,goodfeh[0]+goodfeh[1]*m]
+		
+		return self.run_XCSAO(run_subgrid=run_subgrid,teffrange=teffrange,loggrange=loggrange,fehrange=fehrange,new=False,resample_teff=resample_teff,resample_logg=resample_logg,resample_feh=resample_feh,resample_alpha=resample_alpha)
+		
+
 	
 	
-	def run_XCSAO(self,run_subgrid=True):
+	def run_XCSAO(self,run_subgrid=True,teffrange=[],loggrange=[],fehrange=[],alpharange=[],new=True,resample_teff=None,resample_logg=None,resample_feh=None,resample_alpha=None):
 		if self.data is None:
 			raise RuntimeError('Please add a data spectrum.')
 		if self.grid is None:
 			raise RuntimeError('Please add a template grid/spectrum.')
-		
-		rr=self.get_r_for_grid(self.grid)
+
+		if len(teffrange)==0:
+			teffrange=[self.grid_teff_min,self.grid_teff_max]
+		if len(loggrange)==0:
+			loggrange=[self.grid_logg_min,self.grid_logg_max]
+		if len(fehrange)==0:
+			fehrange=[self.grid_feh_min,self.grid_feh_max]
+		if len(alpharange)==0:
+			alpharange=[self.grid_alpha_min,self.grid_alpha_max]
+			
+		ind=np.where((self.grid_teff>=teffrange[0]) & (self.grid_teff<=teffrange[1]) & (self.grid_logg>=loggrange[0]) & (self.grid_logg<=loggrange[1]) & (self.grid_feh>=fehrange[0]) & (self.grid_feh<=fehrange[1]) & (self.grid_alpha>=alpharange[0]) & (self.grid_alpha<=alpharange[1]))[0]
+
+		rr=self.get_r_for_grid(self.grid[ind])
 		try:
 			a=np.where(rr==max(rr))[0][0]
 		except:
 			a=0
 		
-		self.grid_r=np.array(rr)
+				
+		if new: self.grid_r=np.zeros(len(self.grid))
+		self.grid_r[ind]=rr
 		self.best_r=rr[a]
-		self.best_grid_index=a
-		self.best_ccf=self.getCCF(self.data,self.grid[a])
+		self.best_grid_index=ind[a]
+		self.best_ccf=self.getCCF(self.data,self.grid[ind[a]])
 		
 		if np.isfinite(self.best_r):
 			self.get_rv()
@@ -235,14 +274,33 @@ class PyXCSAO:
 			self.best_rv=[np.nan,np.nan]
 		
 		
-		if (self.grid_teff_num>2) & (run_subgrid):
-			self.best_teff=self.get_par(self.best_teff_subgrid)
-		if (self.grid_logg_num>2) & (run_subgrid):
-			self.best_logg=self.get_par(self.best_logg_subgrid)
-		if (self.grid_feh_num>2) & (run_subgrid):
-			self.best_feh=self.get_par(self.best_feh_subgrid)
+		if (self.grid_teff_num>2) & (resample_teff is not None):
+			self.best_teff=self.get_par(self.best_teff_subgrid,resample_teff)
+		elif (self.grid_teff_num>2) & (run_subgrid):
+			self.best_teff=self.get_par(self.best_teff_sparse)
+		else:
+			self.best_teff=self.grid_teff[self.best_grid_index]
+			
+		if (self.grid_logg_num>2) & (resample_logg is not None):
+			self.best_logg=self.get_par(self.best_logg_subgrid,resample_logg)
+		elif (self.grid_logg_num>2) & (run_subgrid):
+			self.best_logg=self.get_par(self.best_logg_sparse)
+		else:
+			self.best_logg=self.grid_logg[self.best_grid_index]
+			
+		if (self.grid_feh_num>2) & (resample_feh is not None):
+			self.best_feh=self.get_par(self.best_feh_subgrid,resample_feh)
+		elif (self.grid_feh_num>2) & (run_subgrid):
+			self.best_feh=self.get_par(self.best_feh_sparse)
+		else:
+			self.best_feh=self.grid_feh[self.best_grid_index]
+			
+		if (self.grid_alpha_num>2) & (resample_alpha is not None):
+			self.best_alpha=self.get_par(self.best_alpha_subgrid,resample_alpha)
 		if (self.grid_alpha_num>2) & (run_subgrid):
-			self.best_feh=self.get_par(self.best_feh_subgrid)
+			self.best_alpha=self.get_par(self.best_alpha_sparse)
+		else:
+			self.best_alpha=self.grid_alpha[self.best_grid_index]
 		
 		
 		return self.best_template()
@@ -283,9 +341,11 @@ class PyXCSAO:
 		
 
     
-	def get_par(self,func):
-	
-		par,rr=func()
+	def get_par(self,func,subscale=None):
+		if subscale is None:
+			par,rr=func()
+		else:
+			par,rr=func(subscale=subscale)
 		weight=np.exp(rr)
 		weight=10**(rr)
 		
@@ -362,25 +422,25 @@ class PyXCSAO:
 			st['eteff']=self.best_teff[1]
 		except:
 			st['teff']=self.grid_teff[self.best_grid_index]
-			st['eteff']=np.nan
+			st['eteff']=-1
 		try:
 			st['logg']=self.best_logg[0]
 			st['elogg']=self.best_logg[1]
 		except:
 			st['logg']=self.grid_logg[self.best_grid_index]
-			st['elogg']=np.nan
+			st['elogg']=-1
 		try:
 			st['feh']=self.best_feh[0]
 			st['efeh']=self.best_feh[1]
 		except:
 			st['feh']=self.grid_feh[self.best_grid_index]
-			st['efeh']=np.nan
+			st['efeh']=-1
 		try:
 			st['alpha']=self.best_alpha[0]
 			st['ealpha']=self.best_alpha[1]
 		except:
 			st['alpha']=self.grid_alpha[self.best_grid_index]
-			st['ealpha']=np.nan
+			st['ealpha']=-1
 			
 		return st
 	
