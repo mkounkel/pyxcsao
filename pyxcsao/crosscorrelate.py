@@ -253,20 +253,22 @@ class PyXCSAO:
 		if len(alpharange)==0:
 			alpharange=[self.grid_alpha_min,self.grid_alpha_max]
 			
-		ind=np.where((self.grid_teff>=teffrange[0]) & (self.grid_teff<=teffrange[1]) & (self.grid_logg>=loggrange[0]) & (self.grid_logg<=loggrange[1]) & (self.grid_feh>=fehrange[0]) & (self.grid_feh<=fehrange[1]) & (self.grid_alpha>=alpharange[0]) & (self.grid_alpha<=alpharange[1]))[0]
+		if new:
+			self.grid_r=np.zeros(len(self.grid))
+			
+		ind=np.where((self.grid_r ==0) & (self.grid_teff>=teffrange[0]) & (self.grid_teff<=teffrange[1]) & (self.grid_logg>=loggrange[0]) & (self.grid_logg<=loggrange[1]) & (self.grid_feh>=fehrange[0]) & (self.grid_feh<=fehrange[1]) & (self.grid_alpha>=alpharange[0]) & (self.grid_alpha<=alpharange[1]))[0]
 
-		rr=self.get_r_for_grid(self.grid[ind])
+		self.grid_r[ind]=self.get_r_for_grid(self.grid[ind])
 		try:
-			a=np.where(rr==max(rr))[0][0]
+			a=np.where(self.grid_r==max(self.grid_r))[0][0]
 		except:
 			a=0
 		
 				
-		if new: self.grid_r=np.zeros(len(self.grid))
-		self.grid_r[ind]=rr
-		self.best_r=rr[a]
-		self.best_grid_index=ind[a]
-		self.best_ccf=self.getCCF(self.data,self.grid[ind[a]])
+		
+		self.best_r=self.grid_r[a]
+		self.best_grid_index=a
+		self.best_ccf=self.getCCF(self.data,self.grid[a])
 		
 		if np.isfinite(self.best_r):
 			self.get_rv()
