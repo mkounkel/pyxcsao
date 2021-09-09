@@ -7,9 +7,9 @@ To run:
 from pyxcsao.crosscorrelate import PyXCSAO
 
 ### Initiates instance:
-b=PyXCSAO(st_lambda=4000,end_lambda=6000,ncols=16000)
+b=PyXCSAO(st_lambda=5000,end_lambda=10000)
 
----optional parameters: low_bin=5,top_low=10,top_nrun=125,nrun=255,bell_window=0.05,minvel=-500,maxvel=500
+---optional parameters: ncols=8192,low_bin=0,top_low=10,top_nrun=125,nrun=255,bell_window=0.05,minvel=-500,maxvel=500
 
 ### Adds Synthetic grid
 
@@ -26,12 +26,49 @@ b.add_grid(grid_pickle='phoenix.p')
 
 b.add_spectrum('file.fits',data_class='boss')
 
----options: boss,lamost,user
+---options: boss,lamost,segue,user
 
 ### Run XCSAO and get parameters
 
-print(b.run_XCSAO(run_subgrid=False))
+print(b.run_XCSAO())
+
+### Optimized for large grids:
+
+print(b.run_XCSAO_optimized())
 
 ### Plot CCF:
 
 plt.plot(b.lag,b.best_ccf)
+
+### Example Code
+```python
+import glob
+import pandas as pd
+from pyxcsao.crosscorrelate import PyXCSAO
+from astropy.table import Table
+import time
+
+cat=Table.read('path.fits')
+
+best=[]
+b=PyXCSAO(st_lambda=5000,end_lambda=10000)
+b.add_grid(grid_pickle='phoenix_full1.p')
+
+
+batchsize=500
+for j in range(0,len(cat),batchsize):
+    cat1=cat[j:j+batchsize]
+    print(j)
+    for i in range(len(cat1)):
+        path=cat1['path'][i]
+        try:
+            b.add_spectrum(path)
+            x=b.run_XCSAO_optimized()
+            best.append(x.copy())
+        except:
+            print(path)
+            
+
+df = pd.DataFrame(best)
+df.to_csv('batch.csv')
+```
