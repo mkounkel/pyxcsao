@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
     
 setuptools.setup(
     name="PyXCSAO",
-    version="0.1",
+    version="0.2",
     author="Marina Kounkel",
     author_email="marina.kounkel@vanderbilt.edu",
     description="Replicates functionality of IRAF XCSAO",
@@ -18,9 +18,6 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    package_data={
-        'pyxcsao': ['getha.pt','getli.pt'],
-    },
-    install_requires=['astropy','numpy','scipy','specutils','PyAstronomy','torch','torchvision'],
+    install_requires=['astropy','numpy','scipy','specutils','PyAstronomy'],
     python_requires='>=3.6',
 )
