@@ -22,13 +22,11 @@ class PyXCSAO:
 		
 		self.ncols=ncols
 		self.bell_window=bell_window
-		self.low_bin=low_bin
-		self.top_low=top_low
-		self.top_nrun=top_nrun
-		self.nrun=nrun
 		self.spline = SplineInterpolatedResampler()
 		self.taper=self.taper_spectrum()
-		self.taperf=self.taper_FFT()
+		self.taperf_med=self.taper_FFT(low_bin,top_low,top_nrun,nrun)
+		self.taperf_low=self.taper_FFT(20,50,top_nrun,nrun)
+		self.taperf=self.taperf_med
 		self.minvel=minvel
 		self.maxvel=maxvel
 		
@@ -183,15 +181,15 @@ class PyXCSAO:
 		return taper
 	
 	#taper function for the cross correlation in FFT space
-	def taper_FFT(self):
+	def taper_FFT(self,low_bin=0,top_low=20,top_nrun=125,nrun=255):
 		k=fftfreq(self.ncols)*self.ncols/2/np.pi
 		taperf=np.ones(self.ncols)
-		a=np.where((np.abs(k)>=self.nrun) | (np.abs(k)<=self.low_bin))[0]
+		a=np.where((np.abs(k)>=nrun) | (np.abs(k)<=low_bin))[0]
 		taperf[a]=0
-		a=np.where((np.abs(k)>self.low_bin) & (np.abs(k)<=self.top_low))[0]
-		taperf[a]=np.sin((np.abs(k[a])-self.low_bin)*np.pi/2/(self.top_low-self.low_bin))
-		a=np.where((np.abs(k)>=self.top_nrun) & (np.abs(k)<self.nrun))[0]
-		taperf[a]=np.cos((np.abs(k[a])-self.top_nrun)*np.pi/2/(self.nrun-self.top_nrun))
+		a=np.where((np.abs(k)>low_bin) & (np.abs(k)<=top_low))[0]
+		taperf[a]=np.sin((np.abs(k[a])-low_bin)*np.pi/2/(top_low-low_bin))
+		a=np.where((np.abs(k)>=top_nrun) & (np.abs(k)<nrun))[0]
+		taperf[a]=np.cos((np.abs(k[a])-top_nrun)*np.pi/2/(nrun-top_nrun))
 		return taperf
 	
 	#sets up the rebinned loglam & creates lag in km/s
@@ -218,11 +216,15 @@ class PyXCSAO:
 		sigmaA=np.sqrt(1./2/len(mirror)*np.sum((x[startpoint:peak_loc]-mirror)**2))
 		return x[peak_loc]/sigmaA/np.sqrt(2)
 		
-	def run_XCSAO_optimized(self,run_subgrid=True,m=1.5,resample_teff=None,resample_logg=None,resample_feh=None,resample_alpha=None):
+	def run_XCSAO_optimized(self,run_subgrid=True,m=1.5,resample_teff=None,resample_logg=None,resample_feh=None,resample_alpha=None,optimized_for_boss=False):
 		
 		self.run_XCSAO(run_subgrid=False,loggrange=[4.5,4.5],fehrange=[0,0],alpharange=[0,0])
 		goodteff=self.get_par(self.best_teff_sparse)
 		teffrange=[goodteff[0]-goodteff[1]*m,goodteff[0]+goodteff[1]*m]
+		if optimized_for_boss==False:
+			teffrangemin=np.where(np.array(teffrange)>=3500)[0]
+			if len(teffrangemin)==0:
+				teffrange=[goodteff[0]-goodteff[1]*m,3500]
 		
 		self.run_XCSAO(run_subgrid=False,teffrange=teffrange,fehrange=[0,0],alpharange=[0,0],new=False)
 		goodlogg=self.get_par(self.best_logg_sparse)
@@ -233,12 +235,20 @@ class PyXCSAO:
 		goodfeh=self.get_par(self.best_feh_sparse)
 		fehrange=[goodfeh[0]-goodfeh[1]*m,goodfeh[0]+goodfeh[1]*m]
 		
-		return self.run_XCSAO(run_subgrid=run_subgrid,teffrange=teffrange,loggrange=loggrange,fehrange=fehrange,new=False,resample_teff=resample_teff,resample_logg=resample_logg,resample_feh=resample_feh,resample_alpha=resample_alpha)
-		
+		if optimized_for_boss==True:
+			if self.best_teff<3500:
+				self.taperf=self.taperf_low
+			else:
+				self.taperf=self.taperf_med
+			x= self.run_XCSAO(run_subgrid=run_subgrid,teffrange=teffrange,loggrange=loggrange,fehrange=fehrange,new=False,resample_teff=resample_teff,resample_logg=resample_logg,resample_feh=resample_feh,resample_alpha=resample_alpha,min_teff_for_rv=3500)
+			self.taperf=self.taperf_med
+			return x
+		else:
+			return self.run_XCSAO(run_subgrid=run_subgrid,teffrange=teffrange,loggrange=loggrange,fehrange=fehrange,new=False,resample_teff=resample_teff,resample_logg=resample_logg,resample_feh=resample_feh,resample_alpha=resample_alpha)
 
 	
 	
-	def run_XCSAO(self,run_subgrid=True,teffrange=[],loggrange=[],fehrange=[],alpharange=[],new=True,resample_teff=None,resample_logg=None,resample_feh=None,resample_alpha=None):
+	def run_XCSAO(self,run_subgrid=True,teffrange=[],loggrange=[],fehrange=[],alpharange=[],new=True,resample_teff=None,resample_logg=None,resample_feh=None,resample_alpha=None,min_teff_for_rv=None):
 		if self.data is None:
 			raise RuntimeError('Please add a data spectrum.')
 		if self.grid is None:
@@ -263,17 +273,8 @@ class PyXCSAO:
 			a=np.where(self.grid_r==max(self.grid_r))[0][0]
 		except:
 			a=0
-		
-				
-		
-		self.best_r=self.grid_r[a]
 		self.best_grid_index=a
-		self.best_ccf=self.getCCF(self.data,self.grid[a])
-		
-		if np.isfinite(self.best_r):
-			self.get_rv()
-		else:
-			self.best_rv=[np.nan,np.nan]
+				
 		
 		
 		if (self.grid_teff_num>2) & (resample_teff is not None):
@@ -303,6 +304,24 @@ class PyXCSAO:
 			self.best_alpha=self.get_par(self.best_alpha_sparse)
 		else:
 			self.best_alpha=self.grid_alpha[self.best_grid_index]
+			
+		
+		
+		if not min_teff_for_rv is None:
+			x=np.where(self.grid_teff>=min_teff_for_rv)[0]
+			try:
+				a=x[np.where(self.grid_r[x]==max(self.grid_r[x]))[0][0]]
+			except:
+				a=0
+			
+			
+		self.best_r=self.grid_r[a]
+		self.best_ccf=self.getCCF(self.data,self.grid[a])
+		
+		if np.isfinite(self.best_r):
+			self.get_rv()
+		else:
+			self.best_rv=[np.nan,np.nan]
 		
 		
 		return self.best_template()
